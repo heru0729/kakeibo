@@ -114,6 +114,11 @@
   .card h3 { margin: 0 0 14px; font-size: 14px; font-weight: 700; display: flex; align-items: center; justify-content: space-between; }
   .card h3 .mini-add { font-size: 13px; color: var(--brand); font-weight: 600; }
 
+  /* ===== Asset card ===== */
+  .asset-card { background: var(--surface); border-radius: var(--radius); box-shadow: var(--shadow); padding: 15px 18px; margin-bottom: 14px; display: flex; align-items: center; justify-content: space-between; }
+  .asset-card .ac-l { font-size: 13px; color: var(--ink-soft); font-weight: 700; }
+  .asset-card .ac-v { font-size: 27px; font-weight: 800; letter-spacing: -.02em; }
+
   /* ===== Budget bar ===== */
   .budget-box { background: var(--surface); border-radius: var(--radius); box-shadow: var(--shadow); padding: 13px 16px; margin-bottom: 14px; }
   .budget-head { display: flex; justify-content: space-between; align-items: baseline; font-size: 12.5px; margin-bottom: 7px; }
@@ -324,6 +329,7 @@
   <main>
     <!-- ===== LIST ===== -->
     <section class="view active" id="view-list">
+      <div id="assetCard"></div>
       <div id="budgetBar"></div>
       <div id="txList"></div>
     </section>
@@ -369,6 +375,11 @@
 
     <!-- ===== SETTINGS ===== -->
     <section class="view" id="view-settings">
+      <div class="card">
+        <h3>全財産</h3>
+        <div class="bud-row"><div class="bn"><b>現在の全財産</b></div><input type="number" inputmode="numeric" id="assetInput" placeholder="0"></div>
+        <p class="empty-mini">今持っているお金の合計を入れてください。収入・支出を記録すると自動で増減します。</p>
+      </div>
       <div class="card">
         <h3>予算（支出の上限）</h3>
         <div class="bud-row"><div class="bn"><b>全体の月予算</b></div><input type="number" inputmode="numeric" id="budgetTotal" placeholder="未設定"></div>
@@ -473,7 +484,7 @@
 
   /* ---------- keys & defaults ---------- */
   var K_TX = "kakeibo.transactions", K_CAT = "kakeibo.categories", K_THEME = "kakeibo.theme",
-      K_BUD = "kakeibo.budgets", K_GOAL = "kakeibo.goals", K_REC = "kakeibo.recurring";
+      K_BUD = "kakeibo.budgets", K_GOAL = "kakeibo.goals", K_REC = "kakeibo.recurring", K_ASSET = "kakeibo.asset";
 
   var defaultCats = {
     expense: [
@@ -492,6 +503,7 @@
   if (!budgets.byCat) budgets.byCat = {};
   var goals = load(K_GOAL, []);
   var recurring = load(K_REC, []);
+  var assetBase = load(K_ASSET, 0);
 
   var viewMonth = new Date();
   var palette = ["#1f6e5e", "#c2563f", "#d99a2b", "#3a7ca5", "#8b5e9e", "#5a9367", "#c76b8c", "#7a8b3a", "#b5754a", "#4a6f8a"];
@@ -508,6 +520,8 @@
   function toast(msg) { var t = $("toast"); t.textContent = msg; t.classList.add("show"); clearTimeout(t._tm); t._tm = setTimeout(function () { t.classList.remove("show"); }, 1900); }
   function monthTxs() { var key = ym(viewMonth); return txs.filter(function (t) { return t.date.slice(0, 7) === key; }); }
   function monthSum(key) { var inc = 0, exp = 0; txs.forEach(function (t) { if (t.date.slice(0, 7) === key) { if (t.type === "income") inc += t.amount; else exp += t.amount; } }); return { inc: inc, exp: exp }; }
+  function totalNet() { var n = 0; txs.forEach(function (t) { n += (t.type === "income" ? t.amount : -t.amount); }); return n; }
+  function currentAsset() { return assetBase + totalNet(); }
 
   /* ---------- recurring auto-apply ---------- */
   function applyRecurring() {
@@ -540,6 +554,15 @@
     var s = monthSum(ym(viewMonth));
     $("incomeAmt").textContent = fmt(s.inc); $("expenseAmt").textContent = fmt(s.exp); $("balanceAmt").textContent = fmt(s.inc - s.exp);
     $("streakBadge").textContent = "🔥 " + calcStreak() + "日";
+  }
+
+  /* ---------- render: asset ---------- */
+  function renderAsset() {
+    var a = currentAsset();
+    $("assetCard").innerHTML = '<div class="asset-card"><span class="ac-l">全財産</span>' +
+      '<span class="ac-v num" style="color:' + (a < 0 ? "var(--expense)" : "var(--ink)") + '">' +
+      (a < 0 ? "−¥" + fmt(-a) : "¥" + fmt(a)) + '</span></div>';
+    var inp = $("assetInput"); if (inp && document.activeElement !== inp) inp.value = a;
   }
 
   /* ---------- render: budget bar (list tab) ---------- */
@@ -783,7 +806,7 @@
 
   /* ---------- refresh ---------- */
   function refreshAll() {
-    renderHeader(); renderBudgetBar(); renderList(); renderCalendar(); renderStats(); renderGoals();
+    renderHeader(); renderAsset(); renderBudgetBar(); renderList(); renderCalendar(); renderStats(); renderGoals();
     renderDonut(); renderCatBudget(); renderBars(); renderBudgetSettings(); renderRecurList(); renderCatChips();
   }
 
@@ -857,6 +880,9 @@
     }
   };
 
+  // asset
+  $("assetInput").onchange = function () { var v = parseInt(this.value, 10); if (isNaN(v)) v = 0; assetBase = v - totalNet(); save(K_ASSET, assetBase); renderAsset(); toast("全財産を更新しました"); };
+
   // budget settings
   $("budgetTotal").oninput = function () { budgets.total = parseInt(this.value, 10) || 0; save(K_BUD, budgets); renderBudgetBar(); };
   $("catBudgetSettings").oninput = function (e) { var inp = e.target.closest("[data-bcat]"); if (!inp) return; var v = parseInt(inp.value, 10) || 0; if (v > 0) budgets.byCat[inp.dataset.bcat] = v; else delete budgets.byCat[inp.dataset.bcat]; save(K_BUD, budgets); renderCatBudget(); };
@@ -891,7 +917,7 @@
 
   // data export / import / clear
   $("exportBtn").onclick = function () {
-    var data = { version: 2, exportedAt: new Date().toISOString(), transactions: txs, categories: cats, budgets: budgets, goals: goals, recurring: recurring };
+    var data = { version: 3, exportedAt: new Date().toISOString(), transactions: txs, categories: cats, budgets: budgets, goals: goals, recurring: recurring, asset: assetBase };
     var blob = new Blob([JSON.stringify(data, null, 2)], { type: "application/json" });
     var a = document.createElement("a"); a.href = URL.createObjectURL(blob); a.download = "kakeibo-backup-" + toDateInput(new Date()) + ".json";
     document.body.appendChild(a); a.click(); document.body.removeChild(a); setTimeout(function () { URL.revokeObjectURL(a.href); }, 1000); toast("書き出しました");
@@ -908,7 +934,8 @@
         if (d.budgets) budgets = d.budgets; if (!budgets.byCat) budgets.byCat = {};
         if (Array.isArray(d.goals)) goals = d.goals;
         if (Array.isArray(d.recurring)) recurring = d.recurring;
-        save(K_TX, txs); save(K_CAT, cats); save(K_BUD, budgets); save(K_GOAL, goals); save(K_REC, recurring);
+        if (typeof d.asset === "number") assetBase = d.asset;
+        save(K_TX, txs); save(K_CAT, cats); save(K_BUD, budgets); save(K_GOAL, goals); save(K_REC, recurring); save(K_ASSET, assetBase);
         fillRecurSelects(); refreshAll(); toast("読み込みました");
       } catch (err) { alert("読み込みに失敗しました: " + err.message); } e.target.value = "";
     };

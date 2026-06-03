@@ -8,6 +8,8 @@
 <meta name="apple-mobile-web-app-status-bar-style" content="default">
 <meta name="apple-mobile-web-app-title" content="Tally">
 <title>Tally</title>
+<!-- QRCode -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
 <!-- Firebase SDK (compat) -->
 <script src="https://cdn.jsdelivr.net/npm/firebase@12.12.1/firebase-app-compat.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/firebase@12.12.1/firebase-auth-compat.min.js"></script>
@@ -512,6 +514,8 @@ html[data-theme="dark"] .dlg-btns .dlg-ok{color:#06120e}
         <h3>データ</h3>
         <div class="set-row"><div><div class="label">バックアップを書き出す</div><div class="sub">JSONファイルとして保存</div></div><button class="btn-line" id="exportBtn">書き出し</button></div>
         <div class="set-row"><div><div class="label">バックアップを読み込む</div></div><button class="btn-line" id="importBtn">読み込み</button><input type="file" id="importFile" accept="application/json,.json" hidden></div>
+        <div class="set-row" id="fsRow" style="display:none"><div><div class="label">ファイル自動保存</div><div class="sub" id="fsLabel">未設定（Google Driveフォルダを選ぶと同期）</div></div><button class="btn-line" id="fsBtn">設定する</button></div>
+        <div class="set-row"><div><div class="label">QRコードで設定を移行</div><div class="sub">カテゴリ・財布・予算などを別端末へ</div></div><button class="btn-line" id="qrBtn">QR表示</button></div>
         <div class="set-row"><div><div class="label">すべてのデータを削除</div></div><button class="btn-line danger" id="clearBtn">削除</button></div>
       </div>
       <p style="text-align:center;font-size:11px;color:var(--ink-soft);margin:18px 0">Tally — データは端末内にのみ保存されます</p>
@@ -570,6 +574,16 @@ html[data-theme="dark"] .dlg-btns .dlg-ok{color:#06120e}
   <p style="text-align:center;margin-top:24px"><a id="shareTallyLink" href="#" style="color:var(--brand);font-weight:700;font-size:14px">Tallyを使ってみる</a></p>
 </div>
 
+<!-- QR sheet -->
+<div class="overlay" id="qrOverlay"></div>
+<div class="sheet" id="qrSheet">
+  <div class="grip"></div>
+  <div class="sheet-top"><span class="title">QRコードで設定を移行</span><button class="sheet-close" id="qrClose">閉じる</button></div>
+  <p style="font-size:13px;color:var(--ink-soft);margin-bottom:18px;line-height:1.7">カテゴリ・財布・予算・プリセットの設定を別のスマホに移せます。取引履歴は「バックアップを書き出す」を使ってください。</p>
+  <div id="qrCanvas" style="display:flex;justify-content:center;margin-bottom:14px"></div>
+  <p style="text-align:center;font-size:12px;color:var(--ink-soft)">別端末でこのQRをスキャンして、表示されたURLを開いてください</p>
+</div>
+
 <div class="toast" id="toast"></div>
 
 <script>
@@ -583,6 +597,7 @@ function save(key,val){
   var raw=JSON.stringify(val);
   try{ if(lsOK) localStorage.setItem(key,raw); else memStore[key]=raw; }catch(e){ memStore[key]=raw; }
   if(fbReady&&fbUser) scheduleFbSync();
+  autoSaveToFile();
 }
 
 /* ====== keys ====== */
@@ -1196,6 +1211,72 @@ function refreshAll(){
   renderDonut(); renderCatBudget(); renderBars(); renderBudgetSettings(); renderRecurList(); renderPresetList(); renderCatChips(); renderWalletList(); renderColorSwatches(); renderFbStatus();
 }
 
+/* ====== File System Access API ====== */
+var fsDb=null, fsHandle=null;
+function initFsDb(){
+  if(!window.indexedDB) return;
+  var req=indexedDB.open("tally-fs",1);
+  req.onupgradeneeded=function(e){ e.target.result.createObjectStore("handles"); };
+  req.onsuccess=function(e){ fsDb=e.target.result; loadFsHandle(); };
+}
+function loadFsHandle(){
+  if(!fsDb) return;
+  var tx=fsDb.transaction("handles","readonly");
+  var req=tx.objectStore("handles").get("save");
+  req.onsuccess=function(e){ if(e.target.result){ fsHandle=e.target.result; updateFsLabel(); } };
+}
+function saveFsHandle(handle){ if(!fsDb) return; fsHandle=handle; var tx=fsDb.transaction("handles","readwrite"); tx.objectStore("handles").put(handle,"save"); updateFsLabel(); }
+function updateFsLabel(){ var el=$("fsLabel"); if(el) el.textContent=fsHandle?("📁 "+fsHandle.name+" に自動保存中"):"未設定（Google Driveフォルダを選ぶと同期）"; }
+function autoSaveToFile(){
+  if(!fsHandle) return;
+  (async function(){
+    try{
+      var perm=await fsHandle.queryPermission({mode:"readwrite"});
+      if(perm!=="granted") perm=await fsHandle.requestPermission({mode:"readwrite"});
+      if(perm!=="granted") return;
+      var writable=await fsHandle.createWritable();
+      await writable.write(JSON.stringify(getAllExportData(),null,2));
+      await writable.close();
+    }catch(e){ console.warn("auto save failed",e); }
+  })();
+}
+function getAllExportData(){ return{version:5,exportedAt:new Date().toISOString(),transactions:txs,categories:cats,budgets:budgets,goals:goals,recurring:recurring,asset:assetBase,presets:presets,wallets:wallets,accentKey:accentKey}; }
+
+/* ====== QR Code ====== */
+function showQR(){
+  var data={cats:cats,budgets:budgets,wallets:wallets,presets:presets,recurring:recurring,accentKey:accentKey};
+  try{
+    var json=JSON.stringify(data);
+    var b64=btoa(unescape(encodeURIComponent(json)));
+    var url=location.origin+location.pathname+"?tally="+encodeURIComponent(b64);
+    var box=$("qrCanvas"); box.innerHTML="";
+    new QRCode(box,{text:url,width:220,height:220,colorDark:"#000000",colorLight:"#ffffff"});
+    $("qrOverlay").classList.add("open"); $("qrSheet").classList.add("open"); lockScroll(true);
+  }catch(e){ toast("QRコードの生成に失敗しました"); }
+}
+function closeQR(){ $("qrOverlay").classList.remove("open"); $("qrSheet").classList.remove("open"); lockScroll(false); }
+
+function checkUrlImport(){
+  var params=new URLSearchParams(location.search);
+  var tally=params.get("tally"); if(!tally) return;
+  try{
+    var json=decodeURIComponent(escape(atob(decodeURIComponent(tally))));
+    var d=JSON.parse(json);
+    confirmDialog("QRコードから設定を読み込みますか？\n（取引履歴は変わりません）",function(){
+      if(d.cats&&d.cats.expense&&d.cats.income) cats=d.cats;
+      if(d.budgets){ budgets=d.budgets; if(!budgets.byCat) budgets.byCat={}; }
+      if(Array.isArray(d.wallets)&&d.wallets.length) wallets=d.wallets;
+      if(Array.isArray(d.presets)) presets=d.presets;
+      if(Array.isArray(d.recurring)) recurring=d.recurring;
+      if(d.accentKey) accentKey=d.accentKey;
+      save(K_CAT,cats); save(K_BUD,budgets); save(K_WALLETS,wallets); save(K_PRESET,presets); save(K_REC,recurring); save(K_ACCENT,accentKey);
+      applyAccent(accentKey); fillRecurSelects(); fillPresetSelects(); refreshAll();
+      toast("設定を読み込みました");
+      history.replaceState({},"",location.pathname);
+    });
+  }catch(e){ console.warn("QR import error",e); }
+}
+
 /* ====== utils ====== */
 function toast(msg){ var t=$("toast"); t.textContent=msg; t.classList.add("show"); clearTimeout(t._tm); t._tm=setTimeout(function(){ t.classList.remove("show"); },1900); }
 function lockScroll(on){ document.body.style.overflow=on?"hidden":""; }
@@ -1328,7 +1409,21 @@ $("addCatBtn").onclick=function(){ var name=$("newCatName").value.trim(),emoji=$
 // settings - theme
 $("darkToggle").onchange=function(){ var t=this.checked?"dark":"light"; save(K_THEME,t); applyTheme(t); };
 
-// data
+// QR
+$("qrBtn").onclick=function(){ showQR(); };
+$("qrClose").onclick=closeQR;
+$("qrOverlay").onclick=closeQR;
+// File System Access API
+if(window.showSaveFilePicker){ $("fsRow").style.display="flex"; }
+$("fsBtn").onclick=function(){
+  if(!window.showSaveFilePicker){ toast("このブラウザは非対応です"); return; }
+  (async function(){
+    try{
+      var handle=await window.showSaveFilePicker({suggestedName:"tally-data.json",types:[{description:"JSONファイル",accept:{"application/json":[".json"]}}]});
+      saveFsHandle(handle); await (async function(){ if(!fsHandle) return; try{ var p=await fsHandle.queryPermission({mode:"readwrite"}); if(p!=="granted") p=await fsHandle.requestPermission({mode:"readwrite"}); if(p!=="granted") return; var w=await fsHandle.createWritable(); await w.write(JSON.stringify(getAllExportData(),null,2)); await w.close(); }catch(e){} })(); toast("ファイル自動保存を設定しました");
+    }catch(e){ if(e.name!=="AbortError") toast("設定に失敗しました"); }
+  })();
+};
 $("exportBtn").onclick=function(){
   var data={version:5,exportedAt:new Date().toISOString(),transactions:txs,categories:cats,budgets:budgets,goals:goals,recurring:recurring,asset:assetBase,presets:presets,wallets:wallets,accentKey:accentKey};
   var blob=new Blob([JSON.stringify(data,null,2)],{type:"application/json"});
@@ -1383,6 +1478,8 @@ applyRecurring();
 fillRecurSelects(); fillPresetSelects();
 refreshAll();
 checkShareMode();
+checkUrlImport();
+initFsDb();
 })();
 </script>
 </body>

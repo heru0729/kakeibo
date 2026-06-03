@@ -246,6 +246,13 @@
   .switch input:checked + .track { background: var(--brand); }
   .switch input:checked + .track::after { transform: translateX(19px); }
 
+  /* ===== Search & presets ===== */
+  .search-box { position: relative; margin-bottom: 14px; }
+  .search-box input { width: 100%; padding: 11px 14px 11px 40px; border: 1px solid var(--line); border-radius: 12px; background: var(--surface); color: var(--ink); font-size: 14px; }
+  .search-box .si { position: absolute; left: 14px; top: 50%; transform: translateY(-50%); font-size: 15px; opacity: .6; }
+  .preset-chips { display: flex; gap: 8px; overflow-x: auto; padding-bottom: 8px; margin-bottom: 12px; }
+  .preset-chip { flex: none; padding: 8px 13px; border-radius: 20px; background: var(--surface-2); font-size: 13px; white-space: nowrap; }
+
   /* ===== FAB ===== */
   .fab { position: fixed; left: 50%; transform: translateX(-50%); bottom: calc(20px + var(--safe-bottom)); z-index: 30; width: 62px; height: 62px; border-radius: 50%; background: var(--brand); color: #fff; font-size: 32px; font-weight: 300; display: flex; align-items: center; justify-content: center; box-shadow: 0 8px 24px rgba(31, 110, 94, .45); transition: transform .15s; }
   html[data-theme="dark"] .fab { color: #06120e; }
@@ -331,6 +338,7 @@
   <main>
     <!-- ===== LIST ===== -->
     <section class="view active" id="view-list">
+      <div class="search-box"><span class="si">🔍</span><input id="searchInput" type="search" placeholder="メモ・カテゴリで検索"></div>
       <div id="assetCard"></div>
       <div id="budgetBar"></div>
       <div id="txList"></div>
@@ -403,6 +411,20 @@
         <p class="empty-mini">アプリを開いたとき、毎月その日が来ていれば自動で登録します。</p>
       </div>
       <div class="card">
+        <h3>クイック入力（プリセット）</h3>
+        <div id="presetList"></div>
+        <div class="row-form" style="margin-top:10px">
+          <select id="presetType"><option value="expense">支出</option><option value="income">収入</option></select>
+          <select id="presetCat"></select>
+        </div>
+        <div class="row-form">
+          <input class="small num" id="presetAmount" type="number" inputmode="numeric" placeholder="金額">
+          <input class="grow" id="presetLabel" placeholder="表示名（任意）" maxlength="16">
+          <button class="add" id="presetAddBtn">追加</button>
+        </div>
+        <p class="empty-mini">よく使う入力を登録すると、記録画面で1タップで呼び出せます。</p>
+      </div>
+      <div class="card">
         <h3>カテゴリ管理</h3>
         <div class="cat-mgr-tabs">
           <button data-ctype="expense" class="active">支出</button>
@@ -451,6 +473,7 @@
     <button id="typeExpense">支出</button>
     <button id="typeIncome">収入</button>
   </div>
+  <div class="preset-chips" id="presetChips"></div>
   <div class="amount-display zero num" id="amountDisplay">0</div>
   <div class="field"><label>カテゴリ</label><div class="cat-pick" id="catPick"></div></div>
   <div class="field"><label>日付</label><input type="date" id="txDate"></div>
@@ -486,7 +509,7 @@
 
   /* ---------- keys & defaults ---------- */
   var K_TX = "kakeibo.transactions", K_CAT = "kakeibo.categories", K_THEME = "kakeibo.theme",
-      K_BUD = "kakeibo.budgets", K_GOAL = "kakeibo.goals", K_REC = "kakeibo.recurring", K_ASSET = "kakeibo.asset";
+      K_BUD = "kakeibo.budgets", K_GOAL = "kakeibo.goals", K_REC = "kakeibo.recurring", K_ASSET = "kakeibo.asset", K_PRESET = "kakeibo.presets";
 
   var defaultCats = {
     expense: [
@@ -506,6 +529,8 @@
   var goals = load(K_GOAL, []);
   var recurring = load(K_REC, []);
   var assetBase = load(K_ASSET, 0);
+  var presets = load(K_PRESET, []);
+  var searchQuery = "";
 
   var viewMonth = new Date();
   var palette = ["#1f6e5e", "#c2563f", "#d99a2b", "#3a7ca5", "#8b5e9e", "#5a9367", "#c76b8c", "#7a8b3a", "#b5754a", "#4a6f8a"];
@@ -581,11 +606,36 @@
       (rest >= 0 ? "残り ¥" + fmt(rest) : "予算を ¥" + fmt(-rest) + " オーバーしています") + '</div></div>';
   }
 
+  /* ---------- render: preset chips (input sheet) ---------- */
+  function renderPresetChips() {
+    var box = $("presetChips");
+    if (!presets.length) { box.innerHTML = ""; box.style.display = "none"; return; }
+    box.style.display = "flex";
+    box.innerHTML = presets.map(function (p) {
+      var c = catObj(p.type, p.cat), lbl = p.label || (p.cat + " ¥" + fmt(p.amount));
+      return '<button class="preset-chip" data-pid="' + p.id + '">' + (c.emoji || "") + ' ' + esc(lbl) + '</button>';
+    }).join("");
+  }
+
+  /* ---------- search visibility ---------- */
+  function applySearchVisibility() {
+    var s = searchQuery.trim().length > 0, a = $("assetCard"), b = $("budgetBar");
+    if (a) a.style.display = s ? "none" : "";
+    if (b) b.style.display = s ? "none" : "";
+  }
+
   /* ---------- render: list ---------- */
   function renderList() {
     var box = $("txList");
-    var mt = monthTxs().slice().sort(function (a, b) { return a.date === b.date ? b.created - a.created : (a.date < b.date ? 1 : -1); });
-    if (!mt.length) { box.innerHTML = '<div class="empty"><div class="em">🪙</div><p>まだ記録がありません。<br>右下の＋から追加しましょう。</p></div>'; return; }
+    applySearchVisibility();
+    var q = searchQuery.trim().toLowerCase();
+    var source = q ? txs.filter(function (t) { return t.cat.toLowerCase().indexOf(q) >= 0 || (t.memo && t.memo.toLowerCase().indexOf(q) >= 0); }) : monthTxs();
+    var mt = source.slice().sort(function (a, b) { return a.date === b.date ? b.created - a.created : (a.date < b.date ? 1 : -1); });
+    if (!mt.length) {
+      box.innerHTML = q ? '<div class="empty"><div class="em">🔍</div><p>「' + esc(searchQuery.trim()) + '」に合う記録はありません。</p></div>'
+        : '<div class="empty"><div class="em">🪙</div><p>まだ記録がありません。<br>右下の＋から追加しましょう。</p></div>';
+      return;
+    }
     var groups = {}, order = [];
     mt.forEach(function (t) { if (!groups[t.date]) { groups[t.date] = []; order.push(t.date); } groups[t.date].push(t); });
     var html = "", idx = 0;
@@ -593,7 +643,8 @@
       var list = groups[date], dsum = 0;
       list.forEach(function (t) { dsum += (t.type === "income" ? t.amount : -t.amount); });
       var d = new Date(date + "T00:00:00"), wd = ["日", "月", "火", "水", "木", "金", "土"][d.getDay()];
-      html += '<div class="day-group"><div class="day-head"><span>' + (d.getMonth() + 1) + '/' + d.getDate() + ' (' + wd + ')</span>' +
+      var dateLabel = q ? (d.getFullYear() + "/" + (d.getMonth() + 1) + "/" + d.getDate() + " (" + wd + ")") : ((d.getMonth() + 1) + "/" + d.getDate() + " (" + wd + ")");
+      html += '<div class="day-group"><div class="day-head"><span>' + dateLabel + '</span>' +
         '<span class="dsum num">' + (dsum >= 0 ? "+" : "−") + "¥" + fmt(Math.abs(dsum)) + '</span></div>';
       list.forEach(function (t) {
         var c = catObj(t.type, t.cat);
@@ -736,11 +787,25 @@
         '<span class="lr-x" data-rdel="' + r.id + '">×</span></div>';
     }).join("");
   }
-
   function fillRecurSelects() {
     var type = $("recurType").value;
     $("recurCat").innerHTML = (cats[type] || []).map(function (c) { return '<option value="' + esc(c.name) + '">' + (c.emoji || "") + ' ' + esc(c.name) + '</option>'; }).join("");
     if (!$("recurDay").innerHTML) { var o = ""; for (var i = 1; i <= 28; i++) o += '<option value="' + i + '">' + i + '日</option>'; $("recurDay").innerHTML = o; }
+  }
+
+  function renderPresetList() {
+    var box = $("presetList");
+    if (!presets.length) { box.innerHTML = '<p class="empty-mini">まだプリセットはありません。</p>'; return; }
+    box.innerHTML = presets.map(function (p) {
+      var c = catObj(p.type, p.cat), lbl = p.label || (p.cat + " ¥" + fmt(p.amount));
+      return '<div class="list-row"><div class="lr-main">' + (c.emoji || "") + ' ' + esc(lbl) + '<div class="lr-sub">' + (p.type === "income" ? "収入" : "支出") + '・' + esc(p.cat) + '</div></div>' +
+        '<div class="lr-amt ' + (p.type === "income" ? "inc" : "exp") + ' num">' + (p.type === "income" ? "+" : "−") + '¥' + fmt(p.amount) + '</div>' +
+        '<span class="lr-x" data-pdel="' + p.id + '">×</span></div>';
+    }).join("");
+  }
+  function fillPresetSelects() {
+    var type = $("presetType").value;
+    $("presetCat").innerHTML = (cats[type] || []).map(function (c) { return '<option value="' + esc(c.name) + '">' + (c.emoji || "") + ' ' + esc(c.name) + '</option>'; }).join("");
   }
 
   var catMgrType = "expense";
@@ -760,7 +825,7 @@
     $("txMemo").value = tx ? (tx.memo || "") : "";
     $("sheetTitle").textContent = tx ? "記録を編集" : "記録を追加";
     $("sheetDel").style.display = tx ? "block" : "none";
-    updateTypeUI(); renderCatPick(); updateAmount();
+    updateTypeUI(); renderPresetChips(); renderCatPick(); updateAmount();
     $("overlay").classList.add("open"); $("sheet").classList.add("open");
   }
   function closeSheet() { $("overlay").classList.remove("open"); $("sheet").classList.remove("open"); }
@@ -809,7 +874,7 @@
   /* ---------- refresh ---------- */
   function refreshAll() {
     renderHeader(); renderAsset(); renderBudgetBar(); renderList(); renderCalendar(); renderStats(); renderGoals();
-    renderDonut(); renderCatBudget(); renderBars(); renderBudgetSettings(); renderRecurList(); renderCatChips();
+    renderDonut(); renderCatBudget(); renderBars(); renderBudgetSettings(); renderRecurList(); renderPresetList(); renderCatChips();
   }
 
   /* ---------- theme ---------- */
@@ -844,9 +909,18 @@
   $("dayTxList").onclick = function (e) { var tx = e.target.closest(".tx"); if (tx) { var t = txs.find(function (x) { return x.id === tx.dataset.id; }); if (t) { closeDaySheet(); openSheet(t); } } };
   $("dayAddBtn").onclick = function () { var d = daySheetDate; closeDaySheet(); openSheet(null, d); };
 
+  // search
+  $("searchInput").oninput = function () { searchQuery = this.value; renderList(); };
+
   // input sheet
   $("fab").onclick = function () { openSheet(null); };
   $("overlay").onclick = closeSheet;
+  $("presetChips").onclick = function (e) {
+    var b = e.target.closest("button"); if (!b) return;
+    var p = presets.find(function (x) { return x.id === b.dataset.pid; }); if (!p) return;
+    sheetType = p.type; amount = String(p.amount); selCat = catObj(p.type, p.cat);
+    updateTypeUI(); renderCatPick(); updateAmount();
+  };
   $("sheetDel").onclick = function () { if (editId) { var id = editId; closeSheet(); deleteTx(id); } };
   $("typeExpense").onclick = function () { sheetType = "expense"; selCat = null; updateTypeUI(); renderCatPick(); updateAmount(); };
   $("typeIncome").onclick = function () { sheetType = "income"; selCat = null; updateTypeUI(); renderCatPick(); updateAmount(); };
@@ -899,19 +973,29 @@
   };
   $("recurList").onclick = function (e) { var x = e.target.closest("[data-rdel]"); if (!x) return; recurring = recurring.filter(function (r) { return r.id !== x.dataset.rdel; }); save(K_REC, recurring); renderRecurList(); };
 
+  // presets
+  $("presetType").onchange = fillPresetSelects;
+  $("presetAddBtn").onclick = function () {
+    var amt = parseInt($("presetAmount").value, 10);
+    if (!(amt > 0)) { toast("金額を入れてください"); return; }
+    presets.push({ id: uid(), type: $("presetType").value, cat: $("presetCat").value, amount: amt, label: $("presetLabel").value.trim() });
+    save(K_PRESET, presets); $("presetAmount").value = ""; $("presetLabel").value = ""; renderPresetList(); toast("プリセットを追加しました");
+  };
+  $("presetList").onclick = function (e) { var x = e.target.closest("[data-pdel]"); if (!x) return; presets = presets.filter(function (p) { return p.id !== x.dataset.pdel; }); save(K_PRESET, presets); renderPresetList(); };
+
   // category manager
   document.querySelectorAll(".cat-mgr-tabs button").forEach(function (b) { b.onclick = function () { document.querySelectorAll(".cat-mgr-tabs button").forEach(function (x) { x.classList.remove("active"); }); b.classList.add("active"); catMgrType = b.dataset.ctype; renderCatChips(); }; });
   $("catChips").onclick = function (e) {
     var x = e.target.closest("[data-del]"); if (!x) return; var i = parseInt(x.dataset.del, 10);
     if ((cats[catMgrType] || []).length <= 1) { toast("最低1つは必要です"); return; }
-    cats[catMgrType].splice(i, 1); save(K_CAT, cats); renderCatChips(); fillRecurSelects(); refreshAll();
+    cats[catMgrType].splice(i, 1); save(K_CAT, cats); renderCatChips(); fillRecurSelects(); fillPresetSelects(); refreshAll();
   };
   $("addCatBtn").onclick = function () {
     var name = $("newCatName").value.trim(), emoji = $("newCatEmoji").value.trim() || "•";
     if (!name) { toast("カテゴリ名を入力してください"); return; }
     if ((cats[catMgrType] || []).some(function (c) { return c.name === name; })) { toast("同じ名前があります"); return; }
     cats[catMgrType].push({ name: name, emoji: emoji }); save(K_CAT, cats);
-    $("newCatName").value = ""; $("newCatEmoji").value = ""; renderCatChips(); fillRecurSelects(); renderBudgetSettings(); toast("追加しました");
+    $("newCatName").value = ""; $("newCatEmoji").value = ""; renderCatChips(); fillRecurSelects(); fillPresetSelects(); renderBudgetSettings(); toast("追加しました");
   };
 
   // theme
@@ -919,7 +1003,7 @@
 
   // data export / import / clear
   $("exportBtn").onclick = function () {
-    var data = { version: 3, exportedAt: new Date().toISOString(), transactions: txs, categories: cats, budgets: budgets, goals: goals, recurring: recurring, asset: assetBase };
+    var data = { version: 4, exportedAt: new Date().toISOString(), transactions: txs, categories: cats, budgets: budgets, goals: goals, recurring: recurring, asset: assetBase, presets: presets };
     var blob = new Blob([JSON.stringify(data, null, 2)], { type: "application/json" });
     var a = document.createElement("a"); a.href = URL.createObjectURL(blob); a.download = "kakeibo-backup-" + toDateInput(new Date()) + ".json";
     document.body.appendChild(a); a.click(); document.body.removeChild(a); setTimeout(function () { URL.revokeObjectURL(a.href); }, 1000); toast("書き出しました");
@@ -937,8 +1021,9 @@
         if (Array.isArray(d.goals)) goals = d.goals;
         if (Array.isArray(d.recurring)) recurring = d.recurring;
         if (typeof d.asset === "number") assetBase = d.asset;
-        save(K_TX, txs); save(K_CAT, cats); save(K_BUD, budgets); save(K_GOAL, goals); save(K_REC, recurring); save(K_ASSET, assetBase);
-        fillRecurSelects(); refreshAll(); toast("読み込みました");
+        if (Array.isArray(d.presets)) presets = d.presets;
+        save(K_TX, txs); save(K_CAT, cats); save(K_BUD, budgets); save(K_GOAL, goals); save(K_REC, recurring); save(K_ASSET, assetBase); save(K_PRESET, presets);
+        fillRecurSelects(); fillPresetSelects(); refreshAll(); toast("読み込みました");
       } catch (err) { alert("読み込みに失敗しました: " + err.message); } e.target.value = "";
     };
     rd.readAsText(file);
@@ -948,7 +1033,7 @@
   /* ---------- PWA: manifest + install ---------- */
   (function setupPWA() {
     var icon = 'data:image/svg+xml,' + encodeURIComponent(
-      '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><rect width="512" height="512" rx="112" fill="#1f6e5e"/><text x="256" y="350" font-size="300" text-anchor="middle" fill="#fff" font-family="sans-serif" font-weight="bold">¥</text></svg>');
+      '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><rect width="512" height="512" rx="112" fill="#1f6e5e"/><circle cx="256" cy="256" r="150" fill="#ffffff"/><text x="256" y="330" font-size="210" text-anchor="middle" fill="#1f6e5e" font-family="sans-serif" font-weight="bold">¥</text></svg>');
     try {
       var manifest = { name: "Tally", short_name: "Tally", start_url: location.href.split("#")[0], display: "standalone", background_color: "#faf7f0", theme_color: "#1f6e5e", icons: [{ src: icon, sizes: "any", type: "image/svg+xml", purpose: "any maskable" }] };
       var mblob = new Blob([JSON.stringify(manifest)], { type: "application/manifest+json" });
@@ -966,6 +1051,7 @@
   if (!lsOK) { var w = document.createElement("div"); w.className = "warn-bar"; w.textContent = "※ この環境では保存が無効です。ダウンロードして開くと正しく保存されます。"; document.querySelector("header").after(w); }
   applyRecurring();
   fillRecurSelects();
+  fillPresetSelects();
   refreshAll();
 })();
 </script>

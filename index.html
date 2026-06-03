@@ -6,8 +6,8 @@
 <meta name="theme-color" content="#1f6e5e">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="default">
-<meta name="apple-mobile-web-app-title" content="家計簿">
-<title>かんたん家計簿</title>
+<meta name="apple-mobile-web-app-title" content="Tally">
+<title>Tally</title>
 <style>
   :root {
     --bg: #faf7f0;
@@ -70,6 +70,7 @@
     box-shadow: 0 6px 20px rgba(31, 110, 94, .25);
   }
   html[data-theme="dark"] header { color: #06120e; }
+  .brand { text-align: center; font-size: 13px; font-weight: 800; letter-spacing: .14em; opacity: .9; margin-bottom: 8px; }
   .top-row { display: flex; align-items: center; justify-content: space-between; }
   .streak {
     font-size: 12px; font-weight: 700; background: rgba(255,255,255,.16);
@@ -300,6 +301,7 @@
 <body>
 <div class="app">
   <header>
+    <div class="brand">Tally</div>
     <div class="top-row">
       <div class="streak" id="streakBadge">🔥 0日</div>
       <div class="month-nav">
@@ -430,7 +432,7 @@
         <div class="set-row"><div><div class="label">バックアップを読み込む</div><div class="sub">JSONファイルから復元</div></div><button class="btn-line" id="importBtn">読み込み</button><input type="file" id="importFile" accept="application/json,.json" hidden></div>
         <div class="set-row"><div><div class="label">すべてのデータを削除</div><div class="sub">取引履歴を全消去</div></div><button class="btn-line danger" id="clearBtn">削除</button></div>
       </div>
-      <p style="text-align:center;font-size:11px;color:var(--ink-soft);margin:18px 0">かんたん家計簿 — データは端末内にのみ保存されます</p>
+      <p style="text-align:center;font-size:11px;color:var(--ink-soft);margin:18px 0">Tally — データは端末内にのみ保存されます</p>
     </section>
   </main>
 
@@ -948,7 +950,7 @@
     var icon = 'data:image/svg+xml,' + encodeURIComponent(
       '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><rect width="512" height="512" rx="112" fill="#1f6e5e"/><text x="256" y="350" font-size="300" text-anchor="middle" fill="#fff" font-family="sans-serif" font-weight="bold">¥</text></svg>');
     try {
-      var manifest = { name: "かんたん家計簿", short_name: "家計簿", start_url: location.href.split("#")[0], display: "standalone", background_color: "#faf7f0", theme_color: "#1f6e5e", icons: [{ src: icon, sizes: "any", type: "image/svg+xml", purpose: "any maskable" }] };
+      var manifest = { name: "Tally", short_name: "Tally", start_url: location.href.split("#")[0], display: "standalone", background_color: "#faf7f0", theme_color: "#1f6e5e", icons: [{ src: icon, sizes: "any", type: "image/svg+xml", purpose: "any maskable" }] };
       var mblob = new Blob([JSON.stringify(manifest)], { type: "application/manifest+json" });
       var link = document.createElement("link"); link.rel = "manifest"; link.href = URL.createObjectURL(mblob); document.head.appendChild(link);
       var atouch = document.createElement("link"); atouch.rel = "apple-touch-icon"; atouch.href = icon; document.head.appendChild(atouch);

@@ -297,8 +297,6 @@
   .amount-display { text-align: center; font-size: 38px; font-weight: 800; letter-spacing: -.02em; }
   .amount-display::before { content: "¥"; font-size: 23px; font-weight: 600; opacity: .6; margin-right: 4px; }
   .amount-display.zero { color: var(--ink-soft); }
-  @keyframes amtpop { 0% { transform: scale(1); } 35% { transform: scale(1.13); } 100% { transform: scale(1); } }
-  .amount-display.pop { animation: amtpop .2s ease; }
 
   .field { margin-bottom: 14px; }
   .field label { font-size: 12px; color: var(--ink-soft); font-weight: 600; display: block; margin-bottom: 6px; }
@@ -309,7 +307,7 @@
 
   .keypad { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin-bottom: 14px; }
   .keypad button { padding: 15px 0; font-size: 22px; font-weight: 600; border-radius: 12px; background: var(--surface-2); transition: background .1s; }
-  .keypad button:active { background: var(--brand-soft); transform: scale(.93); }
+  .keypad button:active { background: var(--brand-soft); }
   .keypad button.fn { font-size: 18px; color: var(--ink-soft); }
 
   .save-btn { width: 100%; padding: 16px; border-radius: 14px; background: var(--brand); color: #fff; font-size: 16px; font-weight: 700; margin-top: 2px; }
@@ -323,6 +321,15 @@
   .toast { position: fixed; left: 50%; bottom: calc(100px + var(--safe-bottom)); transform: translateX(-50%) translateY(20px); background: var(--ink); color: var(--bg); padding: 11px 20px; border-radius: 24px; font-size: 13px; font-weight: 600; z-index: 60; opacity: 0; transition: .25s; pointer-events: none; box-shadow: 0 4px 16px rgba(0,0,0,.25); }
   .toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
 
+  .dialog { position: fixed; left: 50%; top: 50%; transform: translate(-50%, -50%) scale(.96); z-index: 51; background: var(--surface); border-radius: 16px; padding: 20px; width: min(86%, 340px); box-shadow: 0 12px 40px rgba(0,0,0,.3); opacity: 0; pointer-events: none; transition: opacity .2s, transform .2s; }
+  .dialog.open { opacity: 1; pointer-events: auto; transform: translate(-50%, -50%) scale(1); }
+  .dlg-msg { font-size: 14px; white-space: pre-line; margin-bottom: 16px; line-height: 1.6; }
+  .dlg-input-wrap input { width: 100%; padding: 12px; border: 1px solid var(--line); border-radius: 10px; background: var(--surface-2); color: var(--ink); margin-bottom: 16px; text-align: right; font-size: 20px; font-weight: 700; }
+  .dlg-btns { display: flex; gap: 10px; }
+  .dlg-btns button { flex: 1; padding: 12px; border-radius: 10px; font-size: 14px; font-weight: 700; }
+  .dlg-btns .dlg-cancel { background: var(--surface-2); color: var(--ink-soft); }
+  .dlg-btns .dlg-ok { background: var(--brand); color: #fff; }
+  html[data-theme="dark"] .dlg-btns .dlg-ok { color: #06120e; }
   .warn-bar { background: var(--expense-bg); color: var(--expense); font-size: 12px; text-align: center; padding: 8px; }
   .install-row { display: flex; align-items: center; justify-content: space-between; padding: 13px 2px; }
   .empty-mini { color: var(--ink-soft); font-size: 12.5px; padding: 6px 2px; }
@@ -538,6 +545,13 @@
   <button class="add-day" id="dayAddBtn">＋ この日に追加</button>
 </div>
 
+<div class="overlay" id="dlgOverlay"></div>
+<div class="dialog" id="dialog">
+  <div class="dlg-msg" id="dlgMsg"></div>
+  <div class="dlg-input-wrap" id="dlgInputWrap" style="display:none"><input type="number" inputmode="numeric" id="dlgInput"></div>
+  <div class="dlg-btns"><button class="dlg-cancel" id="dlgCancel">キャンセル</button><button class="dlg-ok" id="dlgOk">OK</button></div>
+</div>
+
 <div class="toast" id="toast"></div>
 
 <script>
@@ -588,6 +602,12 @@
   function daysInMonth(y, m) { return new Date(y, m + 1, 0).getDate(); }
   function toast(msg) { var t = $("toast"); t.textContent = msg; t.classList.add("show"); clearTimeout(t._tm); t._tm = setTimeout(function () { t.classList.remove("show"); }, 1900); }
   function lockScroll(on) { document.body.style.overflow = on ? "hidden" : ""; }
+
+  var dlgState = null;
+  function openDlg() { $("dlgOverlay").classList.add("open"); $("dialog").classList.add("open"); }
+  function closeDlg() { $("dlgOverlay").classList.remove("open"); $("dialog").classList.remove("open"); dlgState = null; }
+  function confirmDialog(msg, onOk) { $("dlgMsg").textContent = msg; $("dlgInputWrap").style.display = "none"; $("dlgOk").textContent = "OK"; dlgState = { ok: onOk, input: false }; openDlg(); }
+  function promptDialog(msg, onValue) { $("dlgMsg").textContent = msg; $("dlgInputWrap").style.display = "block"; $("dlgInput").value = ""; $("dlgOk").textContent = "決定"; dlgState = { ok: onValue, input: true }; openDlg(); setTimeout(function () { try { $("dlgInput").focus(); } catch (e) {} }, 120); }
   function monthTxs() { var key = ym(viewMonth); return txs.filter(function (t) { return t.date.slice(0, 7) === key; }); }
   function monthSum(key) { var inc = 0, exp = 0; txs.forEach(function (t) { if (t.date.slice(0, 7) === key) { if (t.type === "income") inc += t.amount; else exp += t.amount; } }); return { inc: inc, exp: exp }; }
   function totalNet() { var n = 0; txs.forEach(function (t) { n += (t.type === "income" ? t.amount : -t.amount); }); return n; }
@@ -969,7 +989,6 @@
   function updateAmount() {
     var cur = amount === "" ? 0 : parseInt(amount, 10), n = runningTotal + cur;
     var disp = $("amountDisplay"); disp.textContent = fmt(n); disp.classList.toggle("zero", n === 0);
-    disp.classList.remove("pop"); void disp.offsetWidth; disp.classList.add("pop");
     $("amountLabel").textContent = runningTotal > 0 ? "合計（＋で合算中）" : "金額";
     $("saveBtn").disabled = !(n > 0 && selCat);
   }
@@ -985,8 +1004,9 @@
   }
   function deleteTx(id) {
     var t = txs.find(function (x) { return x.id === id; }); if (!t) return;
-    if (!confirm("この記録を削除しますか？\n" + t.cat + " ¥" + fmt(t.amount))) return;
-    txs = txs.filter(function (x) { return x.id !== id; }); save(K_TX, txs); refreshAll();
+    confirmDialog("この記録を削除しますか？\n" + t.cat + " ¥" + fmt(t.amount), function () {
+      txs = txs.filter(function (x) { return x.id !== id; }); save(K_TX, txs); refreshAll(); toast("削除しました");
+    });
   }
 
   /* ---------- day detail sheet ---------- */
@@ -1022,6 +1042,15 @@
   }
 
   /* ================= events ================= */
+  $("dlgCancel").onclick = closeDlg;
+  $("dlgOverlay").onclick = closeDlg;
+  $("dlgOk").onclick = function () {
+    if (!dlgState) { closeDlg(); return; }
+    var cb = dlgState.ok, isInput = dlgState.input, raw = isInput ? $("dlgInput").value : null;
+    closeDlg();
+    if (isInput) { var n = parseInt(raw, 10); if (n > 0 && cb) cb(n); }
+    else if (cb) cb();
+  };
   $("prevMonth").onclick = function () { viewMonth = new Date(viewMonth.getFullYear(), viewMonth.getMonth() - 1, 1); refreshAll(); };
   $("nextMonth").onclick = function () { viewMonth = new Date(viewMonth.getFullYear(), viewMonth.getMonth() + 1, 1); refreshAll(); };
   $("todayBtn").onclick = function () { viewMonth = new Date(); refreshAll(); };
@@ -1094,13 +1123,17 @@
   };
   $("goalList").onclick = function (e) {
     var add = e.target.closest("[data-gadd]"), sub = e.target.closest("[data-gsub]"), del = e.target.closest("[data-gdel]");
-    if (del) { var g0 = goals.find(function (x) { return x.id === del.dataset.gdel; }); if (g0 && confirm("「" + g0.name + "」を削除しますか？")) { goals = goals.filter(function (x) { return x.id !== del.dataset.gdel; }); save(K_GOAL, goals); renderGoals(); } return; }
+    if (del) {
+      var g0 = goals.find(function (x) { return x.id === del.dataset.gdel; }); if (!g0) return;
+      confirmDialog("「" + g0.name + "」を削除しますか？", function () { goals = goals.filter(function (x) { return x.id !== g0.id; }); save(K_GOAL, goals); renderGoals(); });
+      return;
+    }
     if (add || sub) {
       var id = (add || sub).dataset[add ? "gadd" : "gsub"], g = goals.find(function (x) { return x.id === id; }); if (!g) return;
-      var v = prompt((add ? "貯金する金額" : "取り崩す金額") + "を入力してください", "");
-      var n = parseInt(v, 10); if (!(n > 0)) return;
-      g.saved += (add ? n : -n); if (g.saved < 0) g.saved = 0;
-      save(K_GOAL, goals); renderGoals(); toast(add ? "貯金しました" : "取り崩しました");
+      promptDialog((add ? "貯金する金額" : "取り崩す金額") + "を入力してください", function (n) {
+        g.saved += (add ? n : -n); if (g.saved < 0) g.saved = 0;
+        save(K_GOAL, goals); renderGoals(); toast(add ? "貯金しました" : "取り崩しました");
+      });
     }
   };
 
@@ -1160,9 +1193,10 @@
   $("importFile").onchange = function (e) {
     var file = e.target.files[0]; if (!file) return; var rd = new FileReader();
     rd.onload = function () {
-      try {
-        var d = JSON.parse(rd.result); if (!Array.isArray(d.transactions)) throw new Error("形式が不正です");
-        if (!confirm("現在のデータを上書きして読み込みますか？")) return;
+      var d;
+      try { d = JSON.parse(rd.result); if (!Array.isArray(d.transactions)) throw new Error("形式が不正です"); }
+      catch (err) { toast("読み込みに失敗しました"); e.target.value = ""; return; }
+      confirmDialog("現在のデータを上書きして読み込みますか？", function () {
         txs = d.transactions;
         if (d.categories && d.categories.expense && d.categories.income) cats = d.categories;
         if (d.budgets) budgets = d.budgets; if (!budgets.byCat) budgets.byCat = {};
@@ -1172,11 +1206,12 @@
         if (Array.isArray(d.presets)) presets = d.presets;
         save(K_TX, txs); save(K_CAT, cats); save(K_BUD, budgets); save(K_GOAL, goals); save(K_REC, recurring); save(K_ASSET, assetBase); save(K_PRESET, presets);
         fillRecurSelects(); fillPresetSelects(); refreshAll(); toast("読み込みました");
-      } catch (err) { alert("読み込みに失敗しました: " + err.message); } e.target.value = "";
+      });
+      e.target.value = "";
     };
     rd.readAsText(file);
   };
-  $("clearBtn").onclick = function () { if (!confirm("すべての取引履歴を削除します。\nこの操作は取り消せません。よろしいですか？")) return; txs = []; save(K_TX, txs); refreshAll(); toast("削除しました"); };
+  $("clearBtn").onclick = function () { confirmDialog("すべての取引履歴を削除します。\nこの操作は取り消せません。よろしいですか？", function () { txs = []; save(K_TX, txs); refreshAll(); toast("削除しました"); }); };
 
   /* ---------- PWA: manifest + install ---------- */
   (function setupPWA() {

@@ -252,6 +252,24 @@
   .search-box .si { position: absolute; left: 14px; top: 50%; transform: translateY(-50%); font-size: 15px; opacity: .6; }
   .preset-chips { display: flex; gap: 8px; overflow-x: auto; padding-bottom: 8px; margin-bottom: 12px; }
   .preset-chip { flex: none; padding: 8px 13px; border-radius: 20px; background: var(--surface-2); font-size: 13px; white-space: nowrap; }
+  .filter-row { display: flex; gap: 8px; margin-bottom: 14px; }
+  .filter-row select { flex: 1; padding: 9px 10px; border: 1px solid var(--line); border-radius: 10px; background: var(--surface); color: var(--ink); font-size: 13px; }
+  .cal-cell.heat-1 { background: rgba(194,86,63,.10); }
+  .cal-cell.heat-2 { background: rgba(194,86,63,.22); }
+  .cal-cell.heat-3 { background: rgba(194,86,63,.40); }
+  .cal-cell.heat-4 { background: rgba(194,86,63,.58); }
+  .badges { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; }
+  .badge { text-align: center; padding: 12px 6px; border-radius: 12px; background: var(--surface-2); opacity: .45; }
+  .badge.earned { opacity: 1; background: var(--brand-soft); }
+  .badge .be { font-size: 26px; }
+  .badge .bn { font-size: 11px; font-weight: 700; margin-top: 4px; }
+  .badge .bd { font-size: 10px; color: var(--ink-soft); margin-top: 2px; line-height: 1.3; }
+  .report-line { display: flex; justify-content: space-between; padding: 6px 2px; font-size: 13.5px; border-bottom: 1px solid var(--line); }
+  .report-line:last-of-type { border-bottom: none; }
+  .report-line .rl { color: var(--ink-soft); }
+  .report-line .rv { font-weight: 700; }
+  .copy-btn { width: 100%; margin-top: 12px; padding: 11px; border-radius: 10px; background: var(--brand-soft); color: var(--brand); font-weight: 700; font-size: 13px; }
+  .keypad .plus { grid-column: 1 / -1; background: var(--brand-soft); color: var(--brand); font-weight: 700; font-size: 17px; }
 
   /* ===== FAB ===== */
   .fab { position: fixed; left: 50%; transform: translateX(-50%); bottom: calc(20px + var(--safe-bottom)); z-index: 30; width: 62px; height: 62px; border-radius: 50%; background: var(--brand); color: #fff; font-size: 32px; font-weight: 300; display: flex; align-items: center; justify-content: center; box-shadow: 0 8px 24px rgba(31, 110, 94, .45); transition: transform .15s; }
@@ -344,6 +362,10 @@
     <!-- ===== LIST ===== -->
     <section class="view active" id="view-list">
       <div class="search-box"><span class="si">🔍</span><input id="searchInput" type="search" placeholder="メモ・カテゴリで検索"></div>
+      <div class="filter-row">
+        <select id="filterType"><option value="all">すべて</option><option value="expense">支出だけ</option><option value="income">収入だけ</option></select>
+        <select id="sortMode"><option value="date_desc">新しい順</option><option value="date_asc">古い順</option><option value="amount_desc">金額が高い順</option></select>
+      </div>
       <div id="assetCard"></div>
       <div id="budgetBar"></div>
       <div id="txList"></div>
@@ -364,6 +386,11 @@
         <div class="stat-grid" id="statGrid"></div>
       </div>
       <div class="card">
+        <h3>月間レポート</h3>
+        <div id="reportBox"></div>
+        <button class="copy-btn" id="copyReportBtn">まとめをコピー</button>
+      </div>
+      <div class="card">
         <h3>貯金目標 <span class="mini-add" id="addGoalBtn">＋ 追加</span></h3>
         <div id="goalForm" style="display:none" class="row-form">
           <input class="emoji" id="goalEmoji" maxlength="2" placeholder="🎮">
@@ -378,6 +405,10 @@
         <div id="donutBox"></div>
       </div>
       <div class="card">
+        <h3>今月の累積支出</h3>
+        <div id="cumulativeBox"></div>
+      </div>
+      <div class="card">
         <h3>カテゴリ別予算</h3>
         <div id="catBudgetBox"></div>
       </div>
@@ -385,6 +416,10 @@
         <h3>収支の推移（直近6か月）</h3>
         <div class="bars" id="barsBox"></div>
         <div class="bars-legend"><span><i style="background:var(--income)"></i>収入</span><span><i style="background:var(--expense)"></i>支出</span></div>
+      </div>
+      <div class="card">
+        <h3>実績バッジ</h3>
+        <div class="badges" id="badgesBox"></div>
       </div>
     </section>
 
@@ -480,15 +515,16 @@
     <button id="typeIncome">収入</button>
   </div>
   <div class="preset-chips" id="presetChips"></div>
-  <div class="amount-box"><div class="amount-label">金額</div><div class="amount-display zero num" id="amountDisplay">0</div></div>
+  <div class="amount-box"><div class="amount-label" id="amountLabel">金額</div><div class="amount-display zero num" id="amountDisplay">0</div></div>
   <div class="field"><label>カテゴリ</label><div class="cat-pick" id="catPick"></div></div>
   <div class="field"><label>日付</label><input type="date" id="txDate"></div>
-  <div class="field"><label>メモ（任意）</label><input type="text" id="txMemo" placeholder="メモを入力" maxlength="40"></div>
+  <div class="field"><label>メモ（任意）</label><input type="text" id="txMemo" placeholder="メモを入力" maxlength="40" list="memoSuggest"><datalist id="memoSuggest"></datalist></div>
   <div class="keypad" id="keypad">
     <button data-k="7">7</button><button data-k="8">8</button><button data-k="9">9</button>
     <button data-k="4">4</button><button data-k="5">5</button><button data-k="6">6</button>
     <button data-k="1">1</button><button data-k="2">2</button><button data-k="3">3</button>
     <button class="fn" data-k="00">00</button><button data-k="0">0</button><button class="fn" data-k="del">⌫</button>
+    <button class="fn plus" data-k="plus">＋ 合算する</button>
   </div>
   <button class="save-btn" id="saveBtn" disabled>保存する</button>
 </div>
@@ -536,7 +572,7 @@
   var recurring = load(K_REC, []);
   var assetBase = load(K_ASSET, 0);
   var presets = load(K_PRESET, []);
-  var searchQuery = "";
+  var searchQuery = "", filterType = "all", sortMode = "date_desc";
 
   var viewMonth = new Date();
   var palette = ["#1f6e5e", "#c2563f", "#d99a2b", "#3a7ca5", "#8b5e9e", "#5a9367", "#c76b8c", "#7a8b3a", "#b5754a", "#4a6f8a"];
@@ -632,17 +668,34 @@
   }
 
   /* ---------- render: list ---------- */
+  function txHtml(t, idx, showDate) {
+    var c = catObj(t.type, t.cat), sub = "";
+    if (showDate) { var d = new Date(t.date + "T00:00:00"); sub = (d.getMonth() + 1) + "/" + d.getDate() + (t.memo ? " ・ " + esc(t.memo) : ""); }
+    else sub = t.memo ? esc(t.memo) : "";
+    return '<div class="tx" data-id="' + t.id + '" style="animation-delay:' + Math.min(idx * 0.025, 0.4) + 's">' +
+      '<div class="icon">' + (c.emoji || "•") + '</div>' +
+      '<div class="body"><div class="cat">' + esc(t.cat) + '</div>' + (sub ? '<div class="memo">' + sub + '</div>' : '') + '</div>' +
+      '<div class="val ' + (t.type === "income" ? "inc" : "exp") + ' num">' + (t.type === "income" ? "+" : "−") + fmt(t.amount) + '</div></div>';
+  }
   function renderList() {
     var box = $("txList");
     applySearchVisibility();
     var q = searchQuery.trim().toLowerCase();
     var source = q ? txs.filter(function (t) { return t.cat.toLowerCase().indexOf(q) >= 0 || (t.memo && t.memo.toLowerCase().indexOf(q) >= 0); }) : monthTxs();
-    var mt = source.slice().sort(function (a, b) { return a.date === b.date ? b.created - a.created : (a.date < b.date ? 1 : -1); });
-    if (!mt.length) {
-      box.innerHTML = q ? '<div class="empty"><div class="em">🔍</div><p>「' + esc(searchQuery.trim()) + '」に合う記録はありません。</p></div>'
+    if (filterType !== "all") source = source.filter(function (t) { return t.type === filterType; });
+    if (!source.length) {
+      var narrowed = q || filterType !== "all";
+      box.innerHTML = narrowed ? '<div class="empty"><div class="em">🔍</div><p>条件に合う記録はありません。</p></div>'
         : '<div class="empty"><div class="em">🪙</div><p>まだ記録がありません。<br>右下の＋から追加しましょう。</p></div>';
       return;
     }
+    if (sortMode === "amount_desc") {
+      var sorted = source.slice().sort(function (a, b) { return b.amount - a.amount; });
+      box.innerHTML = sorted.map(function (t, i) { return txHtml(t, i, true); }).join("");
+      return;
+    }
+    var asc = sortMode === "date_asc";
+    var mt = source.slice().sort(function (a, b) { return a.date === b.date ? b.created - a.created : (a.date < b.date ? (asc ? -1 : 1) : (asc ? 1 : -1)); });
     var groups = {}, order = [];
     mt.forEach(function (t) { if (!groups[t.date]) { groups[t.date] = []; order.push(t.date); } groups[t.date].push(t); });
     var html = "", idx = 0;
@@ -653,14 +706,7 @@
       var dateLabel = q ? (d.getFullYear() + "/" + (d.getMonth() + 1) + "/" + d.getDate() + " (" + wd + ")") : ((d.getMonth() + 1) + "/" + d.getDate() + " (" + wd + ")");
       html += '<div class="day-group"><div class="day-head"><span>' + dateLabel + '</span>' +
         '<span class="dsum num">' + (dsum >= 0 ? "+" : "−") + "¥" + fmt(Math.abs(dsum)) + '</span></div>';
-      list.forEach(function (t) {
-        var c = catObj(t.type, t.cat);
-        html += '<div class="tx" data-id="' + t.id + '" style="animation-delay:' + Math.min(idx * 0.025, 0.4) + 's">' +
-          '<div class="icon">' + (c.emoji || "•") + '</div>' +
-          '<div class="body"><div class="cat">' + esc(t.cat) + '</div>' + (t.memo ? '<div class="memo">' + esc(t.memo) + '</div>' : '') + '</div>' +
-          '<div class="val ' + (t.type === "income" ? "inc" : "exp") + ' num">' + (t.type === "income" ? "+" : "−") + fmt(t.amount) + '</div></div>';
-        idx++;
-      });
+      list.forEach(function (t) { html += txHtml(t, idx, false); idx++; });
       html += '</div>';
     });
     box.innerHTML = html;
@@ -678,11 +724,13 @@
     var perDay = {};
     txs.forEach(function (t) { if (t.date.slice(0, 7) === ym(viewMonth)) { var dd = parseInt(t.date.slice(8), 10); if (!perDay[dd]) perDay[dd] = { inc: 0, exp: 0 }; if (t.type === "income") perDay[dd].inc += t.amount; else perDay[dd].exp += t.amount; } });
     var todayStr = toDateInput(new Date()), html = "";
+    var maxExp = 0; for (var key in perDay) { if (perDay[key].exp > maxExp) maxExp = perDay[key].exp; }
     for (var i = 0; i < first; i++) html += '<div class="cal-cell empty"></div>';
     for (var d = 1; d <= dim; d++) {
       var dateStr = ym(viewMonth) + "-" + String(d).padStart(2, "0");
       var pd = perDay[d], isToday = dateStr === todayStr;
-      html += '<div class="cal-cell ' + (isToday ? "today" : "") + '" data-date="' + dateStr + '"><div class="d">' + d + '</div>';
+      var heat = (pd && pd.exp > 0 && maxExp > 0) ? " heat-" + Math.min(4, Math.ceil(pd.exp / maxExp * 4)) : "";
+      html += '<div class="cal-cell' + heat + (isToday ? " today" : "") + '" data-date="' + dateStr + '"><div class="d">' + d + '</div>';
       if (pd) {
         if (pd.exp) html += '<div class="amt-e num">-' + fmt(pd.exp) + '</div>';
         if (pd.inc) html += '<div class="amt-i num">+' + fmt(pd.inc) + '</div>';
@@ -709,11 +757,86 @@
     if (cur.exp > 0) { var by = {}; mt.forEach(function (t) { if (t.type === "expense") by[t.cat] = (by[t.cat] || 0) + t.amount; }); var mx = 0; Object.keys(by).forEach(function (k) { if (by[k] > mx) { mx = by[k]; topCat = k; } }); }
     var diffHtml = prev.exp === 0 ? '<span class="num">—</span>' :
       '<span class="' + (diff > 0 ? "up" : "down") + ' num">' + (diff > 0 ? "▲" : "▼") + "¥" + fmt(Math.abs(diff)) + '</span>';
+    var spent = {}; mt.forEach(function (t) { if (t.type === "expense") spent[t.date] = 1; });
+    var noMoney = Math.max(0, elapsed - Object.keys(spent).length);
     box.innerHTML =
       '<div class="stat-item"><div class="l">1日あたり支出</div><div class="v num">¥' + fmt(avg) + '</div></div>' +
       '<div class="stat-item"><div class="l">前月との差（支出）</div><div class="v">' + diffHtml + '</div></div>' +
       '<div class="stat-item"><div class="l">記録した日数</div><div class="v num">' + recDays + '<small>日</small></div></div>' +
-      '<div class="stat-item"><div class="l">一番使った項目</div><div class="v" style="font-size:15px">' + esc(topCat) + '</div></div>';
+      '<div class="stat-item"><div class="l">一番使った項目</div><div class="v" style="font-size:15px">' + esc(topCat) + '</div></div>' +
+      '<div class="stat-item"><div class="l">使わなかった日</div><div class="v num">' + noMoney + '<small>日</small></div></div>';
+  }
+
+  /* ---------- render: badges / report / cumulative / memo ---------- */
+  function calcBadges() {
+    var streak = calcStreak(), totalSaved = 0;
+    goals.forEach(function (g) { totalSaved += g.saved; });
+    return [
+      { e: "🌱", n: "はじめの一歩", d: "最初の記録", ok: txs.length >= 1 },
+      { e: "🔥", n: "3日連続", d: "3日続けて記録", ok: streak >= 3 },
+      { e: "⚡", n: "7日連続", d: "7日続けて記録", ok: streak >= 7 },
+      { e: "🏆", n: "30日連続", d: "30日続けて記録", ok: streak >= 30 },
+      { e: "📝", n: "記録50件", d: "50件記録した", ok: txs.length >= 50 },
+      { e: "📚", n: "記録100件", d: "100件記録した", ok: txs.length >= 100 },
+      { e: "💰", n: "はじめての貯金", d: "貯金を始めた", ok: totalSaved > 0 },
+      { e: "💎", n: "1万円貯金", d: "合計1万円貯めた", ok: totalSaved >= 10000 },
+      { e: "🎯", n: "目標達成", d: "貯金目標を達成", ok: goals.some(function (g) { return g.target > 0 && g.saved >= g.target; }) }
+    ];
+  }
+  function renderBadges() {
+    $("badgesBox").innerHTML = calcBadges().map(function (b) {
+      return '<div class="badge' + (b.ok ? " earned" : "") + '"><div class="be">' + (b.ok ? b.e : "🔒") + '</div><div class="bn">' + esc(b.n) + '</div><div class="bd">' + esc(b.d) + '</div></div>';
+    }).join("");
+  }
+
+  function renderReport() {
+    var box = $("reportBox"), s = monthSum(ym(viewMonth)), bal = s.inc - s.exp, mt = monthTxs();
+    var spent = {}, days = {};
+    mt.forEach(function (t) { days[t.date] = 1; if (t.type === "expense") spent[t.date] = 1; });
+    var now = new Date(), isCur = ym(now) === ym(viewMonth);
+    var elapsed = isCur ? now.getDate() : daysInMonth(viewMonth.getFullYear(), viewMonth.getMonth());
+    var noMoney = Math.max(0, elapsed - Object.keys(spent).length);
+    var topCat = "—"; if (s.exp > 0) { var by = {}; mt.forEach(function (t) { if (t.type === "expense") by[t.cat] = (by[t.cat] || 0) + t.amount; }); var mx = 0; Object.keys(by).forEach(function (k) { if (by[k] > mx) { mx = by[k]; topCat = k; } }); }
+    var label = viewMonth.getFullYear() + "年" + (viewMonth.getMonth() + 1) + "月";
+    var balStr = (bal >= 0 ? "+" : "−") + "¥" + fmt(Math.abs(bal));
+    var lines = [["収入", "¥" + fmt(s.inc)], ["支出", "¥" + fmt(s.exp)], ["収支", balStr], ["使わなかった日", noMoney + "日"], ["一番使った項目", topCat], ["記録した日数", Object.keys(days).length + "日"]];
+    box.innerHTML = lines.map(function (l) { return '<div class="report-line"><span class="rl">' + esc(l[0]) + '</span><span class="rv num">' + esc(l[1]) + '</span></div>'; }).join("");
+    box._text = "【Tally】" + label + "のまとめ\n収入: ¥" + fmt(s.inc) + "\n支出: ¥" + fmt(s.exp) + "\n収支: " + balStr + "\n使わなかった日: " + noMoney + "日\n一番使った項目: " + topCat + "\n記録した日数: " + Object.keys(days).length + "日";
+  }
+
+  function renderCumulative() {
+    var box = $("cumulativeBox");
+    var y = viewMonth.getFullYear(), m = viewMonth.getMonth(), now = new Date(), isCur = ym(now) === ym(viewMonth);
+    var dim = daysInMonth(y, m), lastDay = isCur ? now.getDate() : dim;
+    var daily = []; for (var i = 0; i <= lastDay; i++) daily[i] = 0;
+    monthTxs().forEach(function (t) { if (t.type === "expense") { var dd = parseInt(t.date.slice(8), 10); if (dd <= lastDay) daily[dd] += t.amount; } });
+    var cum = [], run = 0; for (var d = 1; d <= lastDay; d++) { run += daily[d]; cum.push({ d: d, v: run }); }
+    if (!cum.length || run === 0) { box.innerHTML = '<p class="empty-mini" style="text-align:center;padding:16px 0">支出データがありません</p>'; return; }
+    var budget = budgets.total > 0 ? budgets.total : 0, top = Math.max(run, budget) || 1;
+    var W = 300, H = 120, pl = 10, pr = 10, pt = 12, pb = 20, plotW = W - pl - pr, plotH = H - pt - pb;
+    function px(dd) { return pl + (lastDay <= 1 ? plotW : (dd - 1) / (lastDay - 1) * plotW); }
+    function py(v) { return pt + plotH - (v / top * plotH); }
+    var pts = cum.map(function (p) { return px(p.d) + "," + py(p.v); }).join(" ");
+    var last = cum[cum.length - 1];
+    var budgetLine = budget > 0 ? '<line x1="' + pl + '" y1="' + py(budget) + '" x2="' + (W - pr) + '" y2="' + py(budget) + '" stroke="var(--warn)" stroke-width="1" stroke-dasharray="4 3"/><text x="' + (W - pr) + '" y="' + (py(budget) - 4) + '" text-anchor="end" font-size="9" fill="var(--warn)">予算 ¥' + fmt(budget) + '</text>' : '';
+    box.innerHTML = '<svg width="100%" viewBox="0 0 ' + W + ' ' + H + '">' + budgetLine +
+      '<polyline points="' + pts + '" fill="none" stroke="var(--expense)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>' +
+      '<circle cx="' + px(last.d) + '" cy="' + py(last.v) + '" r="3" fill="var(--expense)"/>' +
+      '<text x="' + pl + '" y="' + (H - 6) + '" font-size="9" fill="var(--ink-soft)">1日</text>' +
+      '<text x="' + (W - pr) + '" y="' + (H - 6) + '" text-anchor="end" font-size="9" fill="var(--ink-soft)">' + lastDay + '日</text>' +
+      '<text x="' + px(last.d) + '" y="' + (py(last.v) - 7) + '" text-anchor="end" font-size="10" font-weight="700" fill="var(--expense)">¥' + fmt(last.v) + '</text>' +
+      '</svg>';
+  }
+
+  function renderMemoSuggest() {
+    var seen = {}, opts = [];
+    for (var i = txs.length - 1; i >= 0; i--) { var mm = txs[i].memo; if (mm && mm !== "定期" && !seen[mm]) { seen[mm] = 1; opts.push(mm); } if (opts.length >= 20) break; }
+    $("memoSuggest").innerHTML = opts.map(function (m) { return '<option value="' + esc(m) + '">'; }).join("");
+  }
+
+  function fallbackCopy(txt) {
+    try { var ta = document.createElement("textarea"); ta.value = txt; ta.style.position = "fixed"; ta.style.opacity = "0"; document.body.appendChild(ta); ta.focus(); ta.select(); document.execCommand("copy"); document.body.removeChild(ta); toast("コピーしました"); }
+    catch (e) { toast("コピーできませんでした"); }
   }
 
   /* ---------- render: donut ---------- */
@@ -822,9 +945,10 @@
   }
 
   /* ---------- input sheet ---------- */
-  var sheetType = "expense", amount = "", selCat = null, editId = null;
+  var sheetType = "expense", amount = "", selCat = null, editId = null, runningTotal = 0;
   function openSheet(tx, presetDate) {
     editId = tx ? tx.id : null;
+    runningTotal = 0;
     sheetType = tx ? tx.type : "expense";
     amount = tx ? String(tx.amount) : "";
     selCat = tx ? catObj(sheetType, tx.cat) : null;
@@ -832,7 +956,7 @@
     $("txMemo").value = tx ? (tx.memo || "") : "";
     $("sheetTitle").textContent = tx ? "記録を編集" : "記録を追加";
     $("sheetDel").style.display = tx ? "block" : "none";
-    updateTypeUI(); renderPresetChips(); renderCatPick(); updateAmount();
+    updateTypeUI(); renderPresetChips(); renderMemoSuggest(); renderCatPick(); updateAmount();
     $("overlay").classList.add("open"); $("sheet").classList.add("open"); lockScroll(true);
   }
   function closeSheet() { $("overlay").classList.remove("open"); $("sheet").classList.remove("open"); lockScroll(false); }
@@ -842,9 +966,15 @@
     if (selCat && !list.some(function (c) { return c.name === selCat.name; })) selCat = null;
     box.innerHTML = list.map(function (c, i) { return '<button data-ci="' + i + '"' + (selCat && selCat.name === c.name ? ' class="sel"' : '') + '>' + (c.emoji || "•") + ' ' + esc(c.name) + '</button>'; }).join("");
   }
-  function updateAmount() { var n = amount === "" ? 0 : parseInt(amount, 10); var disp = $("amountDisplay"); disp.textContent = fmt(n); disp.classList.toggle("zero", n === 0); disp.classList.remove("pop"); void disp.offsetWidth; disp.classList.add("pop"); $("saveBtn").disabled = !(n > 0 && selCat); }
+  function updateAmount() {
+    var cur = amount === "" ? 0 : parseInt(amount, 10), n = runningTotal + cur;
+    var disp = $("amountDisplay"); disp.textContent = fmt(n); disp.classList.toggle("zero", n === 0);
+    disp.classList.remove("pop"); void disp.offsetWidth; disp.classList.add("pop");
+    $("amountLabel").textContent = runningTotal > 0 ? "合計（＋で合算中）" : "金額";
+    $("saveBtn").disabled = !(n > 0 && selCat);
+  }
   function doSave() {
-    var n = parseInt(amount || "0", 10); if (!(n > 0) || !selCat) return;
+    var n = runningTotal + (amount === "" ? 0 : parseInt(amount, 10)); if (!(n > 0) || !selCat) return;
     if (editId) {
       var t = txs.find(function (x) { return x.id === editId; });
       if (t) { t.type = sheetType; t.amount = n; t.cat = selCat.name; t.memo = $("txMemo").value.trim(); t.date = $("txDate").value; }
@@ -880,7 +1010,7 @@
 
   /* ---------- refresh ---------- */
   function refreshAll() {
-    renderHeader(); renderAsset(); renderBudgetBar(); renderList(); renderCalendar(); renderStats(); renderGoals();
+    renderHeader(); renderAsset(); renderBudgetBar(); renderList(); renderCalendar(); renderStats(); renderReport(); renderCumulative(); renderBadges(); renderGoals();
     renderDonut(); renderCatBudget(); renderBars(); renderBudgetSettings(); renderRecurList(); renderPresetList(); renderCatChips();
   }
 
@@ -919,6 +1049,13 @@
 
   // search
   $("searchInput").oninput = function () { searchQuery = this.value; renderList(); };
+  $("filterType").onchange = function () { filterType = this.value; renderList(); };
+  $("sortMode").onchange = function () { sortMode = this.value; renderList(); };
+  $("copyReportBtn").onclick = function () {
+    var txt = ($("reportBox")._text) || "";
+    if (navigator.clipboard && navigator.clipboard.writeText) { navigator.clipboard.writeText(txt).then(function () { toast("コピーしました"); }, function () { fallbackCopy(txt); }); }
+    else fallbackCopy(txt);
+  };
 
   // input sheet
   $("fab").onclick = function () { openSheet(null); };
@@ -927,7 +1064,7 @@
   $("presetChips").onclick = function (e) {
     var b = e.target.closest("button"); if (!b) return;
     var p = presets.find(function (x) { return x.id === b.dataset.pid; }); if (!p) return;
-    sheetType = p.type; amount = String(p.amount); selCat = catObj(p.type, p.cat);
+    sheetType = p.type; amount = String(p.amount); runningTotal = 0; selCat = catObj(p.type, p.cat);
     updateTypeUI(); renderCatPick(); updateAmount();
   };
   $("sheetDel").onclick = function () { if (editId) { var id = editId; closeSheet(); deleteTx(id); } };
@@ -937,6 +1074,7 @@
   $("keypad").onclick = function (e) {
     var b = e.target.closest("button"); if (!b) return; var k = b.dataset.k;
     if (navigator.vibrate) { try { navigator.vibrate(8); } catch (e2) {} }
+    if (k === "plus") { var cur = amount === "" ? 0 : parseInt(amount, 10); if (cur > 0) { runningTotal += cur; amount = ""; } updateAmount(); return; }
     if (k === "del") amount = amount.slice(0, -1);
     else if (amount.length < 9) { if (k === "00") { if (amount !== "") amount += "00"; } else amount += k; }
     if (amount.replace(/^0+/, "") === "") amount = ""; else amount = String(parseInt(amount, 10));
